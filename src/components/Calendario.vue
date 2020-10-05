@@ -3,9 +3,9 @@
     <v-col>
       <v-sheet height="64">
         <v-toolbar flat color="white">
-
-          <!-- Botão Adicionar Evento -->
-          <v-btn color="primary" dark class="mr-4" @click="dialog = true">Adicionar</v-btn>
+          <v-btn color="primary" dark class="mr-4" @click="dialog = true">
+            Adicionar
+          </v-btn>
           <v-btn outlined class="mr-4" @click="setToday">
             Hoje
           </v-btn>
@@ -45,6 +45,7 @@
         </v-toolbar>
       </v-sheet>
       <v-sheet height="600">
+        
         <v-calendar
           ref="calendar"
           v-model="focus"
@@ -63,21 +64,34 @@
           :short-weekdays="false"
         ></v-calendar>
 
-        <!-- Adicionar Modal Adicionar Evento -->
-       <v-dialog v-model="dialog" max-width="500">
-  <v-card>
-    <v-container>
-      <v-form @submit.prevent="addEvent">
-        <v-text-field v-model="name" type="text" label="Nome"></v-text-field>
-        <v-text-field v-model="details" type="text" label="Detalhes"></v-text-field>
-        <v-text-field v-model="start" type="date" label="Início"></v-text-field>
-        <v-text-field v-model="end" type="date" label="Fim"></v-text-field>
-        <v-text-field v-model="color" type="color" label="cor"></v-text-field>
-        <v-btn type="submit" color="primay" class="mr-4" @click.stop="dialog = false">Adicionar</v-btn>
-      </v-form>
-    </v-container>
-  </v-card>
-</v-dialog> 
+        <!-- Modal Adicionar Evento -->
+        <v-dialog v-model="dialog">
+          <v-card>
+            <v-container>
+              <v-form @submit.prevent="addEvent">
+                <v-text-field 
+                  type="text" label="Nome do evento" v-model="name">
+                </v-text-field>
+                <v-text-field 
+                  type="text" label="Detalhes do evento" v-model="details">
+                </v-text-field>
+                <v-text-field 
+                  type="date" label="Início" v-model="start">
+                </v-text-field>
+                <v-text-field 
+                  type="date" label="Fim" v-model="end">
+                </v-text-field>
+                <v-text-field 
+                  type="color" label="Cor da marcação" v-model="color">
+                </v-text-field>
+                <v-btn type="submit" color="primary" class="mr-4" 
+                @click.stop="dialog = false">Adicionar</v-btn>
+              </v-form>
+            </v-container>
+          </v-card>
+        </v-dialog>
+
+
         <v-menu
           v-model="selectedOpen"
           :close-on-content-click="false"
@@ -89,26 +103,43 @@
             min-width="350px"
             flat
           >
-            <!-- Adicionar Funcionalidade Editar e Excluir -->
             <v-toolbar
               :color="selectedEvent.color"
               dark
             >
-              <v-btn icon @click="deleteEvent()">
+              <v-btn icon @click="deleteEvent(selectedEvent)">
                 <v-icon>mdi-delete</v-icon>
               </v-btn>
               <v-toolbar-title v-html="selectedEvent.name"></v-toolbar-title>
               <v-spacer></v-spacer>
-              <v-btn icon>
-                <v-icon>mdi-heart</v-icon>
-              </v-btn>
-              <v-btn icon>
-                <v-icon>mdi-dots-vertical</v-icon>
-              </v-btn>
             </v-toolbar>
+
+
             <v-card-text>
-              <span v-html="selectedEvent.details"></span>
+             
+              <v-form v-if="currentlyEditing !== selectedEvent.id">
+                {{selectedEvent.name}} - {{selectedEvent.details}}
+              </v-form>
+
+              <v-form v-else>
+
+                <v-text-field 
+                  type="text" v-model="selectedEvent.name"
+                  label="Editar evento">
+                </v-text-field>
+
+                <textarea-autosize
+                  v-model="selectedEvent.details"
+                  type="text"
+                  style="width: 100%"
+                  :min-height="100"
+                ></textarea-autosize>
+
+              </v-form>
+
             </v-card-text>
+
+            
             <v-card-actions>
               <v-btn
                 text
@@ -117,6 +148,10 @@
               >
                 Cancel
               </v-btn>
+              <v-btn text v-if="currentlyEditing !== selectedEvent.id"
+              @click.prevent="editEvent(selectedEvent.id)">Editar</v-btn>
+
+              <v-btn text v-else  @click.prevent="updateEvent(selectedEvent)">Atualizar</v-btn>
             </v-card-actions>
           </v-card>
         </v-menu>
@@ -127,16 +162,17 @@
 
 <script>
   import {db} from '../main'
+
   export default {
     data: () => ({
-      today: new Date().toISOString().substr(0, 10),
-      focus: new Date().toISOString().substr(0, 10),
+      today: new Date().toISOString().substr(0,10),
+      focus: new Date().toISOString().substr(0,10),
       type: 'month',
       typeToLabel: {
-        month: 'Mês',
-        week: 'Semana',
+        month: 'Mes',
+        week: 'Week',
         day: 'Dia',
-        '4day': '4 Dias',
+        '4day': '4 Days',
       },
       start: null,
       end: null,
@@ -144,10 +180,9 @@
       selectedElement: null,
       selectedOpen: false,
       events: [],
-      // Adicionais
       name: null,
       details: null,
-      color: '#e76f51',
+      color: '#1976D2',
       dialog: false,
       currentlyEditing: null
     }),
@@ -188,65 +223,86 @@
     },
     mounted () {
       this.$refs.calendar.checkChange();
+    },
+    created(){
       this.getEvents();
     },
     methods: {
+      async updateEvent(ev){
+        try {
+
+          await db.collection('eventos').doc(ev.id).update({
+            name: ev.name,
+            details: ev.details
+          })
+
+          this.selectedOpen = false;
+          this.currentlyEditing = null;
+
+          
+        } catch (error) {
+          console.log(error);
+        }
+      },
+      editEvent(id){
+        this.currentlyEditing = id
+      },
       async deleteEvent(ev){
         try {
 
-          await db.collection('calEvent').doc(ev.id).delete();
+          await db.collection('eventos').doc(ev.id).delete();
           this.selectedOpen = false;
           this.getEvents();
-
-        } catch(error){
+          
+        } catch (error) {
           console.log(error);
-
         }
       },
       async addEvent(){
-  try {
-    if(this.name && this.start && this.end){
-      await db.collection('calEvent').add({
-        name: this.name,
-        details: this.details,
-        start: this.start,
-        end: this.end,
-        color: this.color
-      })
-      this.getEvents();
-      this.name = '';
-      this.details = '';
-      this.start = '';
-      this.end = '';
-      this.color = '#1976D2';
-    }else{
-      alert('Campos obligatorios')
-    }
-  } catch (error) {
-    console.log(error);
-  }
-},
+        try {
+          if(this.name && this.start && this.end){
 
-      
+            await db.collection('eventos').add({
+              name: this.name,
+              details: this.details,
+              start: this.start,
+              end: this.end,
+              color: this.color
+            })
+
+            this.getEvents();
+
+            this.name = null;
+            this.details = null;
+            this.start = null;
+            this.end = null;
+            this.color = '#1976D2';
+
+          }else{
+            console.log('Campos obrigatórios');
+          }
+        } catch (error) {
+          console.log(error);
+        }
+      },
       async getEvents(){
-        try{
+        try {
 
-          const snapshot = await db.collection('CalEvents').get();
+          const snapshot = await db.collection('eventos').get();
           const events = [];
 
           snapshot.forEach(doc => {
-            //console.log(doc.id());
+            // console.log(doc.id);
             let eventoData = doc.data();
             eventoData.id = doc.id;
             events.push(eventoData);
           })
 
           this.events = events;
-
-        } catch (error){
+          
+        } catch (error) {
           console.log(error);
         }
-
       },
       viewDay ({ date }) {
         this.focus = date
@@ -293,5 +349,6 @@
     },
   }
 </script>
+
 
 fs.inotify.max_user_watches=524288
